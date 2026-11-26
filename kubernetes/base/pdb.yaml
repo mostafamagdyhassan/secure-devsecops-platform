@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: secure-devsecops-platform
+  namespace: secure-app
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: secure-devsecops-platform
