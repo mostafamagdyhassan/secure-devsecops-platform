@@ -1,0 +1,36 @@
+
+rules:
+  - id: python-hardcoded-secret
+    languages:
+      - python
+    severity: ERROR
+    message: Avoid hardcoding secrets. Use environment variables or a secrets manager.
+    patterns:
+      - pattern: $KEY = "$VALUE"
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(password|secret|api_key|token).*
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: .{8,}
+
+  - id: python-dangerous-eval
+    languages:
+      - python
+    severity: ERROR
+    message: Avoid eval() because it can execute untrusted input.
+    pattern: eval(...)
+
+  - id: python-dangerous-exec
+    languages:
+      - python
+    severity: ERROR
+    message: Avoid exec() with dynamic or untrusted input.
+    pattern: exec(...)
+
+  - id: python-insecure-tls
+    languages:
+      - python
+    severity: ERROR
+    message: TLS certificate verification must not be disabled.
+    pattern: requests.$METHOD(..., verify=False, ...)
