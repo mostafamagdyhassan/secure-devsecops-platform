@@ -1,0 +1,167 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
+    environment {
+        IMAGE_NAME = 'secure-devsecops-platform'
+        AWS_REGION = 'me-south-1'
+        ECR_REPOSITORY = ''
+    }
+
+    parameters {
+        booleanParam(
+            name: 'PUSH_IMAGE',
+            defaultValue: false,
+            description: 'Push the image to AWS ECR'
+        )
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                    python3 -m venv .venv
+                    . .venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r app/requirements-dev.txt
+                '''
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                    . .venv/bin/activate
+                    pytest app/tests -v
+                '''
+            }
+        }
+
+        stage('SAST - Semgrep') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -v "$PWD:/src" \
+                      semgrep/semgrep \
+                      semgrep scan \
+                      --config p/python \
+                      --config /src/security/semgrep/rules.yml \
+                      /src/app/backend \
+                      --error
+                '''
+            }
+        }
+
+        stage('Secret Scanning - Gitleaks') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -v "$PWD:/repo" \
+                      zricethezav/gitleaks:latest \
+                      detect --source=/repo --no-git
+                '''
+            }
+        }
+
+        stage('IaC Scanning - Checkov') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -v "$PWD:/tf" \
+                      bridgecrew/checkov \
+                      --directory /tf/terraform \
+                      --quiet
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    docker build \
+                      -f app/Dockerfile \
+                      -t ${IMAGE_NAME}:${BUILD_NUMBER} \
+                      app
+                '''
+            }
+        }
+
+        stage('Container Scanning - Trivy') {
+            steps {
+                sh '''
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      aquasec/trivy:latest \
+                      image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 1 \
+                      ${IMAGE_NAME}:${BUILD_NUMBER}
+                '''
+            }
+        }
+
+        stage('Push to ECR') {
+            when {
+                expression { params.PUSH_IMAGE }
+            }
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'aws-account-id',
+                        variable: 'AWS_ACCOUNT_ID'
+                    ),
+                    string(
+                        credentialsId: 'aws-access-key-id',
+                        variable: 'AWS_ACCESS_KEY_ID'
+                    ),
+                    string(
+                        credentialsId: 'aws-secret-access-key',
+                        variable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+
+                        ECR_REPOSITORY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}"
+
+                        aws ecr get-login-password --region "$AWS_REGION" |
+                          docker login \
+                            --username AWS \
+                            --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+                        docker tag ${IMAGE_NAME}:${BUILD_NUMBER} \
+                          ${ECR_REPOSITORY}:${BUILD_NUMBER}
+
+                        docker push ${ECR_REPOSITORY}:${BUILD_NUMBER}
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker image prune -f || true'
+            cleanWs()
+        }
+
+        success {
+            echo 'CI pipeline completed successfully.'
+        }
+
+        failure {
+            echo 'Pipeline failed. Review the test and security scan results.'
+        }
+    }
+}
