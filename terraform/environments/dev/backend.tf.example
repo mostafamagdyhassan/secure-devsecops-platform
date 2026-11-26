@@ -1,0 +1,12 @@
+# Rename this file to backend.tf only after creating the
+# S3 bucket and DynamoDB lock table for Terraform state.
+#
+# terraform {
+#   backend "s3" {
+#     bucket         = "REPLACE_WITH_YOUR_STATE_BUCKET"
+#     key            = "secure-devsecops-platform/dev/terraform.tfstate"
+#     region         = "me-south-1"
+#     encrypt        = true
+#     use_lockfile   = true
+#   }
+# }
