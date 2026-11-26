@@ -1,0 +1,13 @@
+compact: true
+quiet: true
+framework:
+  - terraform
+  - kubernetes
+  - dockerfile
+
+soft_fail: false
+
+skip-path:
+  - .terraform
+  - .venv
+  - node_modules
