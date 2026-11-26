@@ -1,0 +1,34 @@
+groups:
+  - name: application-alerts
+    rules:
+      - alert: ApplicationTargetDown
+        expr: up{job="secure-devsecops-platform"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Application monitoring target is down"
+          description: "Prometheus cannot scrape the application target."
+
+      - alert: HighCPUUsage
+        expr: |
+          100 * (1 - avg by (instance) (
+            rate(node_cpu_seconds_total{mode="idle"}[5m])
+          )) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "Node CPU usage has exceeded 85% for 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - node_memory_MemAvailable_bytes /
+          node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Node memory usage has exceeded 90% for 5 minutes."
