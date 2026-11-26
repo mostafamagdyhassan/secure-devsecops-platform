@@ -1,0 +1,11 @@
+
+title = "Secure DevSecOps Platform Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow only verified non-secret test fixtures"
+paths = [
+  '''app/tests/fixtures/''',
+]
